@@ -5,6 +5,10 @@ export interface User {
   country_code: string
   city: string | null
   region: string | null
+  coordinates?: { latitude: number; longitude: number } | null
+  total_listings?: number
+  total_contacts?: number
+  last_active_at?: string
   created_at: string
   updated_at: string
 }
@@ -25,13 +29,21 @@ export interface Product {
   region: string | null
   country: string
   country_code: string
+  coordinates?: { latitude: number; longitude: number } | null
   status: 'live' | 'sold' | 'expired' | 'deleted'
   expires_at: string
+  renewal_count?: number
   views: number
   whatsapp_clicks: number
   created_at: string
   updated_at: string
   seller?: User
+  // Computed fields from view
+  seller_verified?: boolean
+  seller_listings?: number
+  seller_contacts?: number
+  seller_phone?: string
+  seller_country_code?: string
 }
 
 export interface AIAnalysisResult {
@@ -70,6 +82,18 @@ export interface GeolocationData {
   country: string
   country_code: string
 }
+
+export interface LocationData {
+  latitude: number | null
+  longitude: number | null
+  city: string | null
+  region: string | null
+  loading: boolean
+  error: string | null
+  permissionDenied: boolean
+}
+
+export type FeedMode = 'nearby' | 'national' | 'global'
 
 export type AnalyticsEvent =
   | { event: 'listing_started' }
