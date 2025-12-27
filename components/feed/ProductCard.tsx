@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react'
 import Image from 'next/image'
-import { WhatsAppButton } from './WhatsAppButton'
+import { ContactButton } from './ContactButton'
+import { SellerBadge } from '@/components/seller/SellerBadge'
 import { formatPrice } from '@/lib/currency'
 import type { Product } from '@/types'
 
@@ -11,6 +12,7 @@ interface ProductCardProps {
   sellerPhone: string
   onView: (productId: string) => void
   onWhatsAppClick: (productId: string) => void
+  onContact?: (productId: string, channel: 'whatsapp' | 'sms' | 'copy') => void
 }
 
 export function ProductCard({
@@ -18,6 +20,7 @@ export function ProductCard({
   sellerPhone,
   onView,
   onWhatsAppClick,
+  onContact,
 }: ProductCardProps) {
   useEffect(() => {
     // Track view when card is mounted
@@ -25,6 +28,13 @@ export function ProductCard({
   }, [product.id, onView])
 
   const location = [product.city, product.region].filter(Boolean).join(', ')
+
+  const handleContact = (channel: 'whatsapp' | 'sms' | 'copy') => {
+    if (channel === 'whatsapp') {
+      onWhatsAppClick(product.id)
+    }
+    onContact?.(product.id, channel)
+  }
 
   return (
     <div className="relative h-screen w-screen bg-ink snap-start">
@@ -45,17 +55,33 @@ export function ProductCard({
 
       {/* Content Overlay */}
       <div className="absolute inset-0 flex flex-col justify-between p-6 safe-area-inset">
-        {/* Top: Price */}
-        <div className="mt-6">
+        {/* Top: Price + Verified Badge */}
+        <div className="mt-6 flex items-start justify-between">
           <div className="inline-block bg-surface/95 backdrop-blur-sm px-6 py-3 rounded-2xl shadow-lg">
             <p className="text-4xl font-mono font-bold text-ink">
               {formatPrice(product.price, product.currency)}
             </p>
           </div>
+          {product.seller_verified && (
+            <div className="bg-surface/95 backdrop-blur-sm px-3 py-2 rounded-full">
+              <SellerBadge
+                verified={product.seller_verified}
+                listingCount={product.seller_listings}
+                compact
+              />
+            </div>
+          )}
         </div>
 
         {/* Bottom: Info + CTA */}
         <div className="space-y-4">
+          {/* Seller Trust Signal */}
+          <SellerBadge
+            verified={product.seller_verified || false}
+            listingCount={product.seller_listings || 0}
+            className="text-surface/90"
+          />
+
           {/* Product Info */}
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-surface line-clamp-2">
@@ -92,11 +118,14 @@ export function ProductCard({
             )}
           </div>
 
-          {/* WhatsApp CTA */}
-          <WhatsAppButton
-            product={product}
-            sellerPhone={sellerPhone}
-            onClick={() => onWhatsAppClick(product.id)}
+          {/* Multi-Channel Contact */}
+          <ContactButton
+            phone={sellerPhone || product.seller_phone || ''}
+            countryCode={product.seller_country_code}
+            productTitle={product.title}
+            productId={product.id}
+            price={formatPrice(product.price, product.currency)}
+            onContact={handleContact}
           />
         </div>
       </div>

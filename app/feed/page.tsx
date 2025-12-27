@@ -1,19 +1,24 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { FeedContainer } from '@/components/feed/FeedContainer'
+import { LocationBar } from '@/components/feed/LocationBar'
 import { useProducts } from '@/hooks/useProducts'
-import { useGeolocation } from '@/hooks/useGeolocation'
+import { useLocation } from '@/hooks/useLocation'
 import { createClient } from '@/lib/supabase/client'
+import type { FeedMode } from '@/types'
+
+export const dynamic = 'force-dynamic'
 
 export default function FeedPage() {
-  const { location } = useGeolocation()
+  const location = useLocation()
+  const [feedMode, setFeedMode] = useState<FeedMode>('nearby')
+
   const { products, loading, error, hasMore, loadMore, refresh } = useProducts({
     limit: 10,
-    userLocation: {
-      country_code: location.country_code,
-      region: location.region,
-    },
+    mode: feedMode,
+    latitude: location.latitude,
+    longitude: location.longitude,
   })
 
   const supabase = createClient()
@@ -37,16 +42,26 @@ export default function FeedPage() {
   }, [supabase])
 
   return (
-    <main className="h-screen overflow-hidden">
-      <FeedContainer
-        products={products}
-        loading={loading}
-        error={error}
-        hasMore={hasMore}
-        onLoadMore={loadMore}
-        onView={handleView}
-        onWhatsAppClick={handleWhatsAppClick}
+    <main className="h-screen overflow-hidden flex flex-col">
+      <LocationBar
+        city={location.city}
+        loading={location.loading}
+        permissionDenied={location.permissionDenied}
+        feedMode={feedMode}
+        onModeChange={setFeedMode}
+        onLocationClick={() => location.refresh()}
       />
+      <div className="flex-1 overflow-hidden">
+        <FeedContainer
+          products={products}
+          loading={loading}
+          error={error}
+          hasMore={hasMore}
+          onLoadMore={loadMore}
+          onView={handleView}
+          onWhatsAppClick={handleWhatsAppClick}
+        />
+      </div>
     </main>
   )
 }

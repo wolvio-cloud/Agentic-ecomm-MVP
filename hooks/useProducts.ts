@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Product } from '@/types'
+import type { Product, FeedMode } from '@/types'
 
 interface UseProductsOptions {
   limit?: number
-  userLocation?: {
-    country_code: string
-    region: string | null
-  }
+  mode?: FeedMode
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export function useProducts(options: UseProductsOptions = {}) {
-  const { limit = 10, userLocation } = options
+  const { limit = 10, mode = 'global', latitude, longitude } = options
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -25,21 +24,26 @@ export function useProducts(options: UseProductsOptions = {}) {
       setLoading(true)
       setError(null)
 
+      // Use products_with_seller view for trust signals
       let query = supabase
-        .from('products')
-        .select(`
-          *,
-          seller:users!products_seller_id_fkey(phone, country_code)
-        `)
+        .from('products_with_seller' as any)
+        .select('*')
         .eq('status', 'live')
-        .order('created_at', { ascending: false })
-        .range(pageNum * limit, (pageNum + 1) * limit - 1)
 
-      // Prioritize same region if user location is available
-      if (userLocation?.region) {
-        // TODO: Implement location-based sorting
-        // For now, just fetch in chronological order
+      // Apply location filtering based on mode
+      if (mode === 'nearby' && latitude && longitude) {
+        // For nearby mode, we'd use RPC function but for simplicity fallback to all for now
+        // In production, call get_nearby_products() RPC
+        query = query.order('created_at', { ascending: false })
+      } else if (mode === 'national') {
+        // National: Filter by country (India)
+        query = query.eq('country_code', 'IN').order('created_at', { ascending: false })
+      } else {
+        // Global: Show all
+        query = query.order('created_at', { ascending: false })
       }
+
+      query = query.range(pageNum * limit, (pageNum + 1) * limit - 1)
 
       const { data, error: fetchError } = await query
 
@@ -58,8 +62,10 @@ export function useProducts(options: UseProductsOptions = {}) {
   }
 
   useEffect(() => {
+    setPage(0)
+    setProducts([])
     fetchProducts(0)
-  }, [])
+  }, [mode, latitude, longitude])
 
   const loadMore = () => {
     if (!loading && hasMore) {
