@@ -2,93 +2,66 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CameraCapture } from '@/components/sell/CameraCapture'
+import { CaptureChoice } from '@/components/sell/CaptureChoice'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { createClient } from '@/lib/supabase/client'
-import { blobToBase64 } from '@/lib/image'
+
+export const dynamic = 'force-dynamic'
 
 export default function SellPage() {
   const router = useRouter()
-  const [uploading, setUploading] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
 
-  const handleCapture = async (imageBlob: Blob, imageUrl: string) => {
-    setUploading(true)
+  const handleCapture = async (imageBase64: string, source: 'camera' | 'gallery') => {
+    setAnalyzing(true)
     setError(null)
 
     try {
-      // Check authentication
-      const { data: { user } } = await supabase.auth.getUser()
+      // Extract base64 data (remove data URL prefix if present)
+      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '')
 
-      if (!user) {
-        // Redirect to auth, then come back
-        localStorage.setItem('pendingImage', imageUrl)
-        localStorage.setItem('pendingImageBlob', await blobToDataUrl(imageBlob))
-        router.push('/auth?redirect=/sell')
-        return
-      }
-
-      // Upload image to Supabase Storage
-      const fileName = `${user.id}/${Date.now()}.jpg`
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(fileName, imageBlob, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-        })
-
-      if (uploadError) throw uploadError
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(fileName)
-
-      // Analyze image with Claude Vision
-      const base64Image = await blobToBase64(imageBlob)
+      // Analyze image with Claude Vision (max 3 seconds)
       const analysisResponse = await fetch('/api/analyze-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: base64Image }),
+        body: JSON.stringify({ imageData: base64Data }),
       })
 
-      const aiSuggestions = await analysisResponse.json()
+      if (!analysisResponse.ok) {
+        throw new Error('Failed to analyze image')
+      }
 
-      // Store in session storage and navigate to confirm page
-      sessionStorage.setItem('newProduct', JSON.stringify({
-        imageUrl: publicUrl,
-        ...aiSuggestions,
-      }))
+      const aiData = await analysisResponse.json()
 
-      router.push('/sell/confirm')
+      // Store capture data for next page
+      sessionStorage.setItem(
+        'snapSell_capture',
+        JSON.stringify({
+          imageUrl: imageBase64, // Keep as base64 for now, will upload on final submit
+          title: aiData.title,
+          category: aiData.category,
+          color: aiData.color,
+          size: aiData.size,
+          material: aiData.material,
+          condition: aiData.condition,
+          suggestedPrice: aiData.suggestedPrice,
+        })
+      )
+
+      // Navigate to price page
+      router.push('/sell/price')
     } catch (err) {
-      console.error('Upload failed:', err)
-      setError('Failed to process image. Please try again.')
-      setUploading(false)
+      console.error('Analysis failed:', err)
+      setError('Failed to analyze image. Please try again.')
+      setAnalyzing(false)
     }
   }
 
-  const handleError = (err: Error) => {
-    setError(err.message)
-  }
-
-  // Helper to convert blob to data URL
-  const blobToDataUrl = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-  }
-
-  if (uploading) {
+  if (analyzing) {
     return (
       <div className="fixed inset-0 bg-ink flex flex-col items-center justify-center">
         <LoadingSpinner size="lg" />
-        <p className="text-surface mt-4 animate-pulse-subtle">
-          Processing your photo...
-        </p>
+        <p className="text-surface mt-4 animate-pulse">Analyzing image...</p>
       </div>
     )
   }
@@ -97,15 +70,12 @@ export default function SellPage() {
     return (
       <div className="fixed inset-0 bg-surface flex flex-col items-center justify-center p-6">
         <p className="text-red-500 text-lg mb-4">{error}</p>
-        <button
-          onClick={() => setError(null)}
-          className="text-accent underline"
-        >
+        <button onClick={() => setError(null)} className="text-accent underline">
           Try again
         </button>
       </div>
     )
   }
 
-  return <CameraCapture onCapture={handleCapture} onError={handleError} />
+  return <CaptureChoice onCapture={handleCapture} />
 }

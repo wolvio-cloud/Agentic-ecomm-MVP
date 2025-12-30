@@ -51,6 +51,9 @@ export interface AIAnalysisResult {
   category: string
   color: string | null
   size: string | null
+  material?: string | null
+  condition?: string
+  suggestedPrice?: { min: number; max: number }
   confidence: number
 }
 

@@ -41,6 +41,19 @@ export default function FeedPage() {
     }
   }, [supabase])
 
+  const handleContact = useCallback(async (productId: string, channel: 'whatsapp' | 'sms' | 'copy') => {
+    try {
+      // Track contact event with channel and buyer location
+      await (supabase.from('contact_events') as any).insert({
+        product_id: productId,
+        channel,
+        buyer_city: location.city || null,
+      })
+    } catch (err) {
+      console.error('Failed to track contact:', err)
+    }
+  }, [supabase, location.city])
+
   return (
     <main className="h-screen overflow-hidden flex flex-col">
       <LocationBar
@@ -60,6 +73,7 @@ export default function FeedPage() {
           onLoadMore={loadMore}
           onView={handleView}
           onWhatsAppClick={handleWhatsAppClick}
+          onContact={handleContact}
         />
       </div>
     </main>

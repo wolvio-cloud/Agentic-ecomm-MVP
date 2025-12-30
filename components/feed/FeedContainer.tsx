@@ -14,6 +14,7 @@ interface FeedContainerProps {
   onLoadMore: () => void
   onView: (productId: string) => void
   onWhatsAppClick: (productId: string) => void
+  onContact?: (productId: string, channel: 'whatsapp' | 'sms' | 'copy') => void
 }
 
 export function FeedContainer({
@@ -24,6 +25,7 @@ export function FeedContainer({
   onLoadMore,
   onView,
   onWhatsAppClick,
+  onContact,
 }: FeedContainerProps) {
   const { t } = useTranslations()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -106,6 +108,7 @@ export function FeedContainer({
               sellerPhone={product.seller?.phone || ''}
               onView={onView}
               onWhatsAppClick={onWhatsAppClick}
+              onContact={onContact}
             />
           </div>
         )

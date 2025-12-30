@@ -5,24 +5,60 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 })
 
-const ANALYSIS_PROMPT = `You are an expert product cataloger for a mobile marketplace.
+const ANALYSIS_PROMPT = `You are an expert product analyst for a mobile marketplace. Analyze this image and extract product details.
 
-Analyze this product image and extract:
-1. title: A concise, sellable product name (max 50 chars, no brand names unless clearly visible)
-2. category: One of [Clothing, Electronics, Home, Accessories, Textiles, Crafts, Other]
-3. color: Primary color (simple terms: Red, Blue, White, etc.)
-4. size: If applicable and visible (S, M, L, XL, or dimensions)
+CRITICAL: You MUST provide a descriptive, specific title. Never return empty or generic titles like "Item", "Product", or "Item for Sale".
 
-Respond ONLY with valid JSON:
+Return ONLY valid JSON:
 {
-  "title": "string",
-  "category": "string",
-  "color": "string or null",
-  "size": "string or null",
-  "confidence": 0.0-1.0
+  "title": "Descriptive title (3-8 words, e.g., 'Blue Cotton T-Shirt Lot - 50 pieces')",
+  "category": "Clothing|Textiles|Electronics|Home|Accessories|Crafts|Other",
+  "color": "Primary color or 'Mixed'",
+  "material": "Main material if identifiable (cotton, polyester, metal, etc.)",
+  "condition": "New|Like New|Good|Fair",
+  "suggestedPrice": { "min": number, "max": number }
 }
 
-Be conservative. If unsure, use generic terms. The seller will confirm.`
+Guidelines for title:
+- MUST be specific and descriptive (not "Shirt" but "Blue Cotton T-Shirt")
+- Include quantity if bulk items visible (e.g., "T-Shirts (50 pieces)")
+- Include key details like color + material + type
+- 3-8 words maximum
+- No generic terms like "Item", "Product", "Thing"
+
+Guidelines for other fields:
+- Category must be one of the listed options
+- Material should be specific if visible (cotton, polyester, denim, plastic, metal, wood, etc.)
+- suggestedPrice in INR, only if you're confident based on item type and condition
+- Condition should reflect visible wear and quality
+
+If you can't identify the item clearly, use descriptive language based on what you see (e.g., "Mixed Textile Items" not "Item for Sale").`
+
+/**
+ * Generate fallback title from available data
+ * Never returns generic placeholders - builds from available info
+ */
+function generateFallbackTitle(data: Partial<AIAnalysisResult>): string {
+  const parts: string[] = []
+
+  // Build title from available data
+  if (data.color && data.color !== 'Mixed') parts.push(data.color)
+  if (data.material) parts.push(data.material)
+  if (data.category && data.category !== 'Other') parts.push(data.category)
+
+  // If we have enough info, construct a title
+  if (parts.length >= 2) {
+    return parts.join(' ')
+  }
+
+  // Last resort - use category with descriptor
+  if (data.category && data.category !== 'Other') {
+    return data.category + ' Item'
+  }
+
+  // Absolute fallback - return empty to trigger manual input
+  return ''
+}
 
 /**
  * Analyzes a product image using Claude Vision API
@@ -69,17 +105,38 @@ export async function analyzeProductImage(
 
     const result = JSON.parse(jsonMatch[0]) as AIAnalysisResult
 
+    // Validate title - never allow generic placeholders
+    if (!result.title ||
+        result.title === 'Item for Sale' ||
+        result.title === 'Product' ||
+        result.title === 'Item' ||
+        result.title.length < 3) {
+      result.title = generateFallbackTitle(result) || ''
+    }
+
     return result
   } catch (error) {
     console.error('Claude Vision analysis failed:', error)
 
-    // Return conservative defaults on error
-    return {
-      title: 'Item for Sale',
+    // Return with best-effort fallback
+    const fallbackData: Partial<AIAnalysisResult> = {
       category: 'Other',
       color: null,
       size: null,
+      material: null,
+      condition: 'New',
       confidence: 0,
+    }
+
+    return {
+      ...fallbackData,
+      title: generateFallbackTitle(fallbackData) || '', // Empty triggers manual input
+      category: fallbackData.category!,
+      color: fallbackData.color || null,
+      size: fallbackData.size || null,
+      material: fallbackData.material || null,
+      condition: fallbackData.condition || 'New',
+      confidence: fallbackData.confidence!,
     }
   }
 }
